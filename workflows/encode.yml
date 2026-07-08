@@ -1,0 +1,42 @@
+name: Encode Drive videos to R2
+
+on:
+  workflow_dispatch:        # manual "Run workflow" button
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+
+concurrency:
+  group: encode-pipeline    # never two runs at once
+  cancel-in-progress: false
+
+jobs:
+  encode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg + rclone
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          curl -s https://rclone.org/install.sh | sudo bash >/dev/null
+
+      - name: Run encode pipeline
+        env:
+          # --- Google Drive (read-only) ---
+          RCLONE_CONFIG_GDRIVE_TYPE: drive
+          RCLONE_CONFIG_GDRIVE_SCOPE: drive.readonly
+          RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          # --- Cloudflare R2 ---
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://bd8e0e4e875b5148e3b581803192cd4a.r2.cloudflarestorage.com
+          # --- Pipeline settings ---
+          BUCKET: fast-poc
+          PREFIX: playout
+          PUBLIC_BASE: https://myskn.media
+          MAX_FILES: "10"
+        run: bash scripts/encode-pipeline.sh
